@@ -1,183 +1,185 @@
+// =====================================================
+// QuickNotes - Project 2 API Client
+// Practice API: JSONPlaceholder ("posts" are our notes)
+// =====================================================
+
 const API_URL = "https://jsonplaceholder.typicode.com/posts";
+const MAX_TITLE_LENGTH = 100;
 
-const loadBtn = document.getElementById("load-btn");
-const submitBtn = document.getElementById("submit-btn");
-const noteForm = document.getElementById("note-form");
-const titleInput = document.getElementById("title-input");
-const bodyInput = document.getElementById("body-input");
-const statusMsg = document.getElementById("status");
-const notesList = document.getElementById("notes-list");
+// ---------- 1. Elements ----------
+const loadBtn = document.querySelector("#load-btn");
+const statusText = document.querySelector("#status");
+const list = document.querySelector("#notes-list");
+const form = document.querySelector("#note-form");
+const titleInput = document.querySelector("#title-input");
+const bodyInput = document.querySelector("#body-input");
+const submitBtn = document.querySelector("#submit-btn");
 
-function setStatus(text, type = "loading") {
-  statusMsg.textContent = text;
-  statusMsg.className = `status-msg ${type}`;
+// ---------- 2. State ----------
+let notes = [];
+
+// ---------- 3. Reusable request helper ----------
+// Sends a request, throws on HTTP errors, and returns the status + data.
+async function request(url, options = {}) {
+  const response = await fetch(url, options);
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+
+  // 204 No Content has no body, so there is nothing to parse
+  const data = response.status === 204 ? null : await response.json();
+  return { status: response.status, data: data };
 }
 
-function clearStatus() {
-  statusMsg.textContent = "";
-  statusMsg.className = "status-msg";
+// ---------- 4. API functions (one per endpoint) ----------
+async function getNotes() {
+  const result = await request(`${API_URL}?_limit=10`);
+  return result.data;
 }
 
-function toggleButtons(disabled) {
-  loadBtn.disabled = disabled;
-  submitBtn.disabled = disabled;
-  const deleteButtons = document.querySelectorAll(".delete-btn");
-  deleteButtons.forEach((btn) => {
-    btn.disabled = disabled;
+async function createNote(title, body) {
+  return request(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title, body: body, userId: 1 }),
   });
 }
 
-async function request(url, options = {}) {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-  }
-  return response.json();
+async function deleteNoteOnServer(id) {
+  return request(`${API_URL}/${id}`, { method: "DELETE" });
 }
 
-function renderNoteItem(note, prepend = false) {
+// ---------- 5. UI helpers ----------
+function setStatus(message, type = "info") {
+  statusText.textContent = message;
+  statusText.className = `status status-${type}`;
+}
+
+function createNoteElement(note) {
   const li = document.createElement("li");
-  li.className = "note-item";
-  li.dataset.id = note.id;
+  li.classList.add("note");
 
-  const contentDiv = document.createElement("div");
-  contentDiv.className = "note-content";
+  const title = document.createElement("h3");
+  title.textContent = note.title;
 
-  const titleEl = document.createElement("h3");
-  titleEl.textContent = note.title;
+  const body = document.createElement("p");
+  body.textContent = note.body || "(no details)";
 
-  const bodyEl = document.createElement("p");
-  bodyEl.textContent = note.body || "";
+  const del = document.createElement("button");
+  del.type = "button";
+  del.classList.add("delete-btn");
+  del.textContent = "Delete";
+  del.addEventListener("click", () => handleDelete(note, del));
 
-  contentDiv.appendChild(titleEl);
-  contentDiv.appendChild(bodyEl);
-
-  const deleteBtn = document.createElement("button");
-  deleteBtn.className = "delete-btn";
-  deleteBtn.textContent = "Delete";
-  deleteBtn.type = "button";
-  deleteBtn.addEventListener("click", () => handleDeleteNote(note.id, li));
-
-  li.appendChild(contentDiv);
-  li.appendChild(deleteBtn);
-
-  if (prepend && notesList.firstChild) {
-    notesList.insertBefore(li, notesList.firstChild);
-  } else {
-    notesList.appendChild(li);
-  }
+  li.append(title, body, del);
+  return li;
 }
 
-async function loadNotes() {
-  toggleButtons(true);
-  setStatus("Loading notes...", "loading");
+function render() {
+  list.innerHTML = "";
+
+  if (notes.length === 0) {
+    const empty = document.createElement("li");
+    empty.classList.add("empty");
+    empty.textContent = "No notes to show. Load notes or create one.";
+    list.appendChild(empty);
+    return;
+  }
+
+  notes.forEach((note) => list.appendChild(createNoteElement(note)));
+}
+
+function validateTitle(title) {
+  if (title === "") return "Please enter a title.";
+  if (title.length > MAX_TITLE_LENGTH) {
+    return `Titles must be ${MAX_TITLE_LENGTH} characters or fewer.`;
+  }
+  return "";
+}
+
+// ---------- 6. Handlers ----------
+async function handleLoad() {
+  setStatus("Loading notes...", "info");
+  loadBtn.disabled = true;
 
   try {
-    const notes = await request(`${API_URL}?_limit=10`);
-    notesList.innerHTML = "";
-
-    if (!notes || notes.length === 0) {
-      const emptyLi = document.createElement("li");
-      emptyLi.className = "empty-message";
-      emptyLi.textContent = "No notes available.";
-      notesList.appendChild(emptyLi);
-      clearStatus();
-      return;
-    }
-
-    notes.forEach((note) => renderNoteItem(note));
-    setStatus("Loaded 10 notes from the server.", "success");
-  } catch (err) {
-    setStatus(`Failed to load notes: ${err.message}`, "error");
+    notes = await getNotes();
+    render();
+    setStatus(`Loaded ${notes.length} notes from the server.`, "success");
+  } catch (error) {
+    console.error(error);
+    setStatus("Could not load notes. Check your connection.", "error");
   } finally {
-    toggleButtons(false);
+    loadBtn.disabled = false;
   }
 }
 
-async function handleCreateNote(event) {
+async function handleCreate(event) {
   event.preventDefault();
 
   const title = titleInput.value.trim();
   const body = bodyInput.value.trim();
+  const error = validateTitle(title);
 
-  if (!title) {
-    setStatus("A title is required.", "error");
+  if (error) {
+    setStatus(error, "error");
+    titleInput.focus();
     return;
   }
 
-  if (title.length > 100) {
-    setStatus("Title cannot exceed 100 characters.", "error");
-    return;
-  }
-
-  toggleButtons(true);
-  setStatus("Creating note...", "loading");
+  setStatus("Saving note...", "info");
+  submitBtn.disabled = true;
 
   try {
-    const payload = {
-      title: title,
-      body: body,
-      userId: 1,
-    };
+    const result = await createNote(title, body);
+    const created = result.data;
 
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    // JSONPlaceholder does not really save new notes and always returns
+    // id 101. We keep the server's id for display, but mark the note as
+    // "local" and give it a unique localId so each one can be deleted.
+    const note = { ...created, localId: Date.now(), isLocal: true };
 
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}`);
-    }
-
-    const createdNote = await response.json();
-
-    const emptyMsg = notesList.querySelector(".empty-message");
-    if (emptyMsg) {
-      emptyMsg.remove();
-    }
-
-    renderNoteItem(createdNote, true);
-    setStatus(`Note created (status ${response.status}, id ${createdNote.id}).`, "success");
-    noteForm.reset();
-  } catch (err) {
-    setStatus(`Failed to create note: ${err.message}`, "error");
+    notes.unshift(note);
+    render();
+    setStatus(
+      `Note created (status ${result.status}, id ${created.id}).`,
+      "success"
+    );
+    form.reset();
+  } catch (error) {
+    console.error(error);
+    setStatus("Could not create the note. Please try again.", "error");
   } finally {
-    toggleButtons(false);
+    submitBtn.disabled = false;
   }
 }
 
-async function handleDeleteNote(id, element) {
-  toggleButtons(true);
-  setStatus(`Deleting note ${id}...`, "loading");
+async function handleDelete(note, button) {
+  button.disabled = true;
+  setStatus("Deleting note...", "info");
 
   try {
-    /*
-      JSONPlaceholder is a mock API and does not persist created notes (e.g. id: 101) on its server.
-      Sending a DELETE to /posts/{id} mock-acknowledges the call, so we proceed with the API request
-      and remove the item from the local DOM list on completion.
-    */
-    await request(`${API_URL}/${id}`, {
-      method: "DELETE",
-    });
-
-    element.remove();
-    setStatus(`Note ${id} deleted successfully.`, "success");
-
-    if (notesList.children.length === 0) {
-      const emptyLi = document.createElement("li");
-      emptyLi.className = "empty-message";
-      emptyLi.textContent = "No notes available.";
-      notesList.appendChild(emptyLi);
+    // Notes created while the page is open were never really stored by the
+    // practice API, so there is nothing to delete on the server.
+    // A real API would store them, and we would always send DELETE.
+    if (!note.isLocal) {
+      await deleteNoteOnServer(note.id);
     }
-  } catch (err) {
-    setStatus(`Failed to delete note: ${err.message}`, "error");
-  } finally {
-    toggleButtons(false);
+
+    notes = notes.filter((n) =>
+      note.isLocal ? n.localId !== note.localId : n.id !== note.id
+    );
+    render();
+    setStatus("Note deleted.", "success");
+  } catch (error) {
+    console.error(error);
+    setStatus("Could not delete the note. Please try again.", "error");
+    button.disabled = false;
   }
 }
 
-loadBtn.addEventListener("click", loadNotes);
-noteForm.addEventListener("submit", handleCreateNote);
+// ---------- 7. Wire up events and first render ----------
+loadBtn.addEventListener("click", handleLoad);
+form.addEventListener("submit", handleCreate);
+render();

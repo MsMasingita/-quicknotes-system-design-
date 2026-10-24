@@ -1,92 +1,102 @@
-# QuickNotes Data Model Specification
+# QuickNotes Data Model
 
-## 1. Overview and Design Decisions
+We use a **relational (SQL) database - PostgreSQL**.
 
-The QuickNotes application uses a relational data model (PostgreSQL). A relational structure ensures strict schema enforcement, ACID guarantees for note updates, and referential integrity between users, notes, and tags through foreign key constraints.
+## Entities
 
-A many-to-many relationship links notes and tags using an associative junction table (`note_tags`). Soft deletes via a `deleted_at` timestamp are supported on notes to prevent accidental data loss.
+**users** - people with an account
 
-## 2. Entity-Relationship Diagram
+| Column        | Type      | Rules                                  |
+| ------------- | --------- | -------------------------------------- |
+| id            | integer   | Primary key                            |
+| name          | text      | Required                               |
+| email         | text      | Required, unique                       |
+| password_hash | text      | Required (never store plain passwords) |
+| created_at    | timestamp | Defaults to now                        |
 
-```text
-+------------------+          +------------------+          +------------------+
-|      users       |          |      notes       |          |       tags       |
-+------------------+          +------------------+          +------------------+
-| id (PK)          |<---+     | id (PK)          |<---+     | id (PK)          |<---+
-| email            |    |     | user_id (FK) ----+    |     | user_id (FK)     |    |
-| password_hash    |    +-----| title            |    |     | name             |    |
-| created_at       |          | body             |    |     | created_at       |    |
-| updated_at       |          | created_at       |    |     +------------------+    |
-+------------------+          | updated_at       |    |                             |
-                              | deleted_at       |    |     +------------------+    |
-                              +------------------+    |     |    note_tags     |    |
-                                                      |     +------------------+    |
-                                                      +-----| note_id (PK, FK) |    |
-                                                            | tag_id (PK, FK)  +----+
-                                                            +------------------+
-```
+**notes** - one note belongs to one user
 
-### Entities Description
+| Column     | Type      | Rules                            |
+| ---------- | --------- | -------------------------------- |
+| id         | integer   | Primary key                      |
+| user_id    | integer   | Foreign key → users.id, required |
+| text       | text      | Required, max 200 characters     |
+| category   | text      | personal / work / study          |
+| created_at | timestamp | Defaults to now                  |
+| updated_at | timestamp | Defaults to now                  |
 
-- **users**: Represents registered accounts authenticated via email and hashed credentials.
-- **notes**: Core multi-tenant note entities owned by a user.
-- **tags**: User-defined labels for categorizing notes.
-- **note_tags**: Junction table establishing the many-to-many relationship between notes and tags.
+**tags** - labels such as "urgent" (id, name - name is unique)
 
-## 3. Database Schema (PostgreSQL DDL)
+**note_tags** - join table linking notes and tags (note_id, tag_id)
 
-```sql
--- 1. Users Table
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+## Relationships
 
--- 2. Notes Table
-CREATE TABLE notes (
-    id SERIAL PRIMARY KEY,
-    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(100) NOT NULL,
-    body TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
-);
+- **users → notes: one-to-many.** One user has many notes; each note has exactly one owner (`notes.user_id`).
+- **notes ↔ tags: many-to-many.** A note can have many tags and a tag can be used on many notes, so the `note_tags` table stores pairs.
 
--- 3. Tags Table
-CREATE TABLE tags (
-    id SERIAL PRIMARY KEY,
-    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT unique_user_tag UNIQUE (user_id, name)
-);
+## SQL schema
 
--- 4. Note Tags (Junction Table for Many-to-Many)
-CREATE TABLE note_tags (
-    note_id INT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
-    tag_id INT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-    PRIMARY KEY (note_id, tag_id)
-);
-```
+    CREATE TABLE users (
+      id            SERIAL PRIMARY KEY,
+      name          TEXT NOT NULL,
+      email         TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+    );
 
-## 4. Indexing and Performance Strategy
+    CREATE TABLE notes (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text       TEXT NOT NULL CHECK (char_length(text) BETWEEN 1 AND 200),
+      category   TEXT NOT NULL DEFAULT 'personal'
+                 CHECK (category IN ('personal', 'work', 'study')),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
 
-```sql
--- Fast lookups for active notes owned by a specific user (ordered by update date)
-CREATE INDEX idx_notes_user_updated ON notes(user_id, updated_at DESC) WHERE deleted_at IS NULL;
+    CREATE TABLE tags (
+      id   SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE
+    );
 
--- Fast lookups for user tags
-CREATE INDEX idx_tags_user_id ON tags(user_id);
+    CREATE TABLE note_tags (
+      note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+      tag_id  INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+      PRIMARY KEY (note_id, tag_id)
+    );
 
--- Speed up junction queries when filtering notes by tag
-CREATE INDEX idx_note_tags_tag_id ON note_tags(tag_id);
-```
+`SERIAL` is PostgreSQL's auto-numbering integer (1, 2, 3...).
 
-### Rationale
+## Example queries
 
-- `idx_notes_user_updated`: A composite, partial index ensures that listing a user's active notes avoids scanning soft-deleted records and eliminates separate sorting overhead.
-- `idx_note_tags_tag_id`: Speeds up reverse lookups when finding all notes associated with a given tag.
+    -- 1. A user's notes, newest first, 20 per page (page 1)
+    SELECT id, text, category, created_at
+    FROM notes
+    WHERE user_id = 1
+    ORDER BY created_at DESC
+    LIMIT 20 OFFSET 0;
+
+    -- 2. A user's notes with the tag "urgent" (JOIN)
+    SELECT notes.id, notes.text
+    FROM notes
+    JOIN note_tags ON note_tags.note_id = notes.id
+    JOIN tags      ON tags.id = note_tags.tag_id
+    WHERE notes.user_id = 1 AND tags.name = 'urgent';
+
+    -- 3. Number of notes per category for a user
+    SELECT category, COUNT(*) AS total
+    FROM notes
+    WHERE user_id = 1
+    GROUP BY category;
+
+## Indexes
+
+    CREATE INDEX idx_notes_user_created ON notes (user_id, created_at DESC);
+
+Almost every request is "get this user's notes, newest first". This index lets the database jump straight to one user's notes already in date order, instead of scanning every note in the table. Primary keys and UNIQUE columns (like `email` and `tags.name`) are indexed automatically.
+
+## Why SQL instead of NoSQL?
+
+Our data is well structured (users, notes, tags) with clear relationships and rules (every note needs an owner, text max 200 characters, valid categories). A relational database enforces these rules for us and handles the many-to-many tags relationship with JOINs.
+
+Our estimate (~180 GB per year) fits comfortably in one PostgreSQL primary with read replicas. A document database could be reconsidered if notes later hold very flexible content such as images or checklists.
