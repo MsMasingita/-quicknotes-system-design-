@@ -2,21 +2,29 @@ const API_URL = "https://jsonplaceholder.typicode.com/posts";
 
 const loadBtn = document.getElementById("load-btn");
 const submitBtn = document.getElementById("submit-btn");
-const statusEl = document.getElementById("status");
 const noteForm = document.getElementById("note-form");
 const titleInput = document.getElementById("title-input");
 const bodyInput = document.getElementById("body-input");
+const statusMsg = document.getElementById("status");
 const notesList = document.getElementById("notes-list");
 
-function setStatus(message, type) {
-  if (!message) {
-    statusEl.textContent = "";
-    statusEl.className = "";
-    statusEl.classList.remove("active");
-    return;
-  }
-  statusEl.textContent = message;
-  statusEl.className = `active ${type}`;
+function setStatus(text, type = "loading") {
+  statusMsg.textContent = text;
+  statusMsg.className = `status-msg ${type}`;
+}
+
+function clearStatus() {
+  statusMsg.textContent = "";
+  statusMsg.className = "status-msg";
+}
+
+function toggleButtons(disabled) {
+  loadBtn.disabled = disabled;
+  submitBtn.disabled = disabled;
+  const deleteButtons = document.querySelectorAll(".delete-btn");
+  deleteButtons.forEach((btn) => {
+    btn.disabled = disabled;
+  });
 }
 
 async function request(url, options = {}) {
@@ -24,73 +32,65 @@ async function request(url, options = {}) {
   if (!response.ok) {
     throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
   }
-  if (response.status === 204) {
-    return { data: null, status: response.status };
-  }
-  const data = await response.json();
-  return { data, status: response.status };
+  return response.json();
 }
 
-function renderEmptyState() {
-  notesList.innerHTML = "";
-  const emptyItem = document.createElement("li");
-  emptyItem.className = "empty-state";
-  emptyItem.textContent = "No notes available. Click 'Load notes' or create one above.";
-  notesList.appendChild(emptyItem);
-}
-
-function createNoteElement(note) {
+function renderNoteItem(note, prepend = false) {
   const li = document.createElement("li");
   li.className = "note-item";
-  li.id = `note-${note.id}`;
+  li.dataset.id = note.id;
 
-  const headerDiv = document.createElement("div");
-  headerDiv.className = "note-header";
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "note-content";
 
   const titleEl = document.createElement("h3");
-  titleEl.className = "note-title";
   titleEl.textContent = note.title;
+
+  const bodyEl = document.createElement("p");
+  bodyEl.textContent = note.body || "";
+
+  contentDiv.appendChild(titleEl);
+  contentDiv.appendChild(bodyEl);
 
   const deleteBtn = document.createElement("button");
   deleteBtn.className = "delete-btn";
   deleteBtn.textContent = "Delete";
-  deleteBtn.addEventListener("click", () => handleDeleteNote(note.id, deleteBtn));
+  deleteBtn.type = "button";
+  deleteBtn.addEventListener("click", () => handleDeleteNote(note.id, li));
 
-  headerDiv.appendChild(titleEl);
-  headerDiv.appendChild(deleteBtn);
+  li.appendChild(contentDiv);
+  li.appendChild(deleteBtn);
 
-  const bodyEl = document.createElement("p");
-  bodyEl.className = "note-body";
-  bodyEl.textContent = note.body || "";
-
-  li.appendChild(headerDiv);
-  li.appendChild(bodyEl);
-  return li;
+  if (prepend && notesList.firstChild) {
+    notesList.insertBefore(li, notesList.firstChild);
+  } else {
+    notesList.appendChild(li);
+  }
 }
 
 async function loadNotes() {
-  loadBtn.disabled = true;
+  toggleButtons(true);
   setStatus("Loading notes...", "loading");
 
   try {
-    const { data: notes } = await request(`${API_URL}?_limit=10`);
+    const notes = await request(`${API_URL}?_limit=10`);
     notesList.innerHTML = "";
 
     if (!notes || notes.length === 0) {
-      renderEmptyState();
-      setStatus("No notes found on server.", "success");
+      const emptyLi = document.createElement("li");
+      emptyLi.className = "empty-message";
+      emptyLi.textContent = "No notes available.";
+      notesList.appendChild(emptyLi);
+      clearStatus();
       return;
     }
 
-    notes.forEach((note) => {
-      notesList.appendChild(createNoteElement(note));
-    });
-
-    setStatus(`Loaded ${notes.length} notes from the server.`, "success");
-  } catch (error) {
-    setStatus(`Failed to load notes: ${error.message}`, "error");
+    notes.forEach((note) => renderNoteItem(note));
+    setStatus("Loaded 10 notes from the server.", "success");
+  } catch (err) {
+    setStatus(`Failed to load notes: ${err.message}`, "error");
   } finally {
-    loadBtn.disabled = false;
+    toggleButtons(false);
   }
 }
 
@@ -101,18 +101,16 @@ async function handleCreateNote(event) {
   const body = bodyInput.value.trim();
 
   if (!title) {
-    setStatus("Validation error: Title is required.", "error");
-    titleInput.focus();
+    setStatus("A title is required.", "error");
     return;
   }
 
   if (title.length > 100) {
-    setStatus("Validation error: Title cannot exceed 100 characters.", "error");
-    titleInput.focus();
+    setStatus("Title cannot exceed 100 characters.", "error");
     return;
   }
 
-  submitBtn.disabled = true;
+  toggleButtons(true);
   setStatus("Creating note...", "loading");
 
   try {
@@ -122,61 +120,64 @@ async function handleCreateNote(event) {
       userId: 1,
     };
 
-    const { data: newNote, status } = await request(API_URL, {
+    const response = await fetch(API_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json; charset=UTF-8",
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
     });
 
-    const emptyStateEl = notesList.querySelector(".empty-state");
-    if (emptyStateEl) {
-      notesList.innerHTML = "";
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}`);
     }
 
-    notesList.prepend(createNoteElement(newNote));
+    const createdNote = await response.json();
+
+    const emptyMsg = notesList.querySelector(".empty-message");
+    if (emptyMsg) {
+      emptyMsg.remove();
+    }
+
+    renderNoteItem(createdNote, true);
+    setStatus(`Note created (status ${response.status}, id ${createdNote.id}).`, "success");
     noteForm.reset();
-    setStatus(`Note created (status ${status}, id ${newNote.id}).`, "success");
-  } catch (error) {
-    setStatus(`Failed to create note: ${error.message}`, "error");
+  } catch (err) {
+    setStatus(`Failed to create note: ${err.message}`, "error");
   } finally {
-    submitBtn.disabled = false;
+    toggleButtons(false);
   }
 }
 
-async function handleDeleteNote(noteId, buttonElement) {
-  /*
-   * NOTE REGARDING JSONPLACEHOLDER:
-   * JSONPlaceholder is a mock REST API. It simulates HTTP responses (such as 200 OK)
-   * but does not mutate a real persistent database on the backend. Newly created items
-   * (e.g. ID 101) return 200 on DELETE without persisting. We still send the network request
-   * and, on HTTP success, remove the corresponding DOM element from the UI.
-   */
-  buttonElement.disabled = true;
-  setStatus(`Deleting note #${noteId}...`, "loading");
+async function handleDeleteNote(id, element) {
+  toggleButtons(true);
+  setStatus(`Deleting note ${id}...`, "loading");
 
   try {
-    await request(`${API_URL}/${noteId}`, {
+    /*
+      JSONPlaceholder is a mock API and does not persist created notes (e.g. id: 101) on its server.
+      Sending a DELETE to /posts/{id} mock-acknowledges the call, so we proceed with the API request
+      and remove the item from the local DOM list on completion.
+    */
+    await request(`${API_URL}/${id}`, {
       method: "DELETE",
     });
 
-    const noteItem = document.getElementById(`note-${noteId}`);
-    if (noteItem) {
-      noteItem.remove();
-    }
+    element.remove();
+    setStatus(`Note ${id} deleted successfully.`, "success");
 
     if (notesList.children.length === 0) {
-      renderEmptyState();
+      const emptyLi = document.createElement("li");
+      emptyLi.className = "empty-message";
+      emptyLi.textContent = "No notes available.";
+      notesList.appendChild(emptyLi);
     }
-
-    setStatus(`Note #${noteId} successfully deleted.`, "success");
-  } catch (error) {
-    setStatus(`Failed to delete note #${noteId}: ${error.message}`, "error");
-    buttonElement.disabled = false;
+  } catch (err) {
+    setStatus(`Failed to delete note: ${err.message}`, "error");
+  } finally {
+    toggleButtons(false);
   }
 }
 
 loadBtn.addEventListener("click", loadNotes);
 noteForm.addEventListener("submit", handleCreateNote);
-renderEmptyState();

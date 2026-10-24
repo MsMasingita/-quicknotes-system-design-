@@ -8,38 +8,40 @@
   <script src="api.js" defer></script>
 </head>
 <body>
-  <main class="container">
+  <div class="container">
     <header>
-      <h1>QuickNotes Manager</h1>
-      <p>Frontend integration prototype with REST API</p>
+      <h1>QuickNotes System</h1>
+      <p>Prototype client interacting with JSONPlaceholder</p>
     </header>
 
-    <section class="actions-section">
-      <button id="load-btn">Load notes</button>
-      <p id="status" role="status" aria-live="polite"></p>
-    </section>
+    <main>
+      <section class="controls">
+        <button id="load-btn" type="button">Load notes</button>
+        <p id="status" class="status-msg"></p>
+      </section>
 
-    <section class="form-section">
-      <h2>Create a Note</h2>
-      <form id="note-form" novalidate>
-        <div class="form-group">
-          <label for="title-input">Title (required, max 100 characters):</label>
-          <input type="text" id="title-input" name="title" maxlength="100" required>
-        </div>
+      <section class="form-section">
+        <h2>Create a Note</h2>
+        <form id="note-form">
+          <div class="field">
+            <label for="title-input">Note Title (Required, max 100 characters):</label>
+            <input type="text" id="title-input" maxlength="100" required placeholder="Meeting highlights...">
+          </div>
 
-        <div class="form-group">
-          <label for="body-input">Body (optional):</label>
-          <textarea id="body-input" name="body" rows="4"></textarea>
-        </div>
+          <div class="field">
+            <label for="body-input">Note Body (Optional):</label>
+            <textarea id="body-input" rows="4" placeholder="Discussed quarterly roadmap..."></textarea>
+          </div>
 
-        <button type="submit" id="submit-btn">Create Note</button>
-      </form>
-    </section>
+          <button id="submit-btn" type="submit">Create Note</button>
+        </form>
+      </section>
 
-    <section class="notes-section">
-      <h2>Notes</h2>
-      <ul id="notes-list"></ul>
-    </section>
-  </main>
+      <section class="notes-section">
+        <h2>Notes</h2>
+        <ul id="notes-list"></ul>
+      </section>
+    </main>
+  </div>
 </body>
 </html>

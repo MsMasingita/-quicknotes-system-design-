@@ -5,10 +5,10 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #f4f6f8;
+  color: #24292e;
   line-height: 1.6;
-  color: #222;
-  background-color: #f7f9fc;
   padding: 2rem 1rem;
 }
 
@@ -27,93 +27,81 @@ header {
   padding-bottom: 1rem;
 }
 
-header h1 {
-  font-size: 1.8rem;
-  color: #1a202c;
+h1 {
+  font-size: 1.75rem;
+  margin-bottom: 0.25rem;
 }
 
-header p {
-  color: #718096;
-}
-
-.actions-section, .form-section, .notes-section {
-  margin-bottom: 2rem;
+h2 {
+  font-size: 1.25rem;
+  margin: 1.5rem 0 0.75rem;
 }
 
 button {
-  background-color: #2b6cb0;
+  background-color: #0366d6;
   color: #ffffff;
   border: none;
+  border-radius: 6px;
   padding: 0.6rem 1.2rem;
-  border-radius: 4px;
   font-size: 0.95rem;
+  font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
 
 button:hover:not(:disabled) {
-  background-color: #2c5282;
+  background-color: #024ea4;
 }
 
 button:disabled {
-  background-color: #a0aec0;
+  background-color: #94d3a2;
   cursor: not-allowed;
+  opacity: 0.6;
 }
 
-#status {
-  margin-top: 0.8rem;
-  padding: 0.75rem 1rem;
-  border-radius: 4px;
+.status-msg {
+  margin-top: 0.75rem;
   font-weight: 500;
-  display: none;
+  min-height: 1.4rem;
 }
 
-#status.active {
-  display: block;
+.status-msg.loading {
+  color: #586069;
 }
 
-#status.loading {
-  background-color: #ebf8ff;
-  color: #2b6cb0;
-  border: 1px solid #bee3f8;
+.status-msg.success {
+  color: #22863a;
 }
 
-#status.success {
-  background-color: #f0fff4;
-  color: #276749;
-  border: 1px solid #c6f6d5;
+.status-msg.error {
+  color: #cb2431;
 }
 
-#status.error {
-  background-color: #fff5f5;
-  color: #9b2c2c;
-  border: 1px solid #fed7d7;
-}
-
-.form-group {
+.field {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 1rem;
 }
 
 label {
-  display: block;
   font-weight: 600;
-  margin-bottom: 0.3rem;
-  color: #2d3748;
+  margin-bottom: 0.35rem;
 }
 
-input[type="text"], textarea {
-  width: 100%;
+input[type="text"],
+textarea {
+  border: 1px solid #d1d5da;
+  border-radius: 6px;
   padding: 0.6rem;
-  border: 1px solid #cbd5e0;
-  border-radius: 4px;
-  font-size: 1rem;
   font-family: inherit;
+  font-size: 0.95rem;
 }
 
-input[type="text"]:focus, textarea:focus {
+input[type="text"]:focus,
+textarea:focus {
   outline: none;
-  border-color: #3182ce;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.25);
+  border-color: #0366d6;
+  box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.2);
 }
 
 #notes-list {
@@ -122,51 +110,40 @@ input[type="text"]:focus, textarea:focus {
 }
 
 .note-item {
-  border: 1px solid #e2e8f0;
-  background-color: #ffffff;
+  border: 1px solid #e1e4e8;
   border-radius: 6px;
   padding: 1rem;
   margin-bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.note-header {
+  background-color: #fafbfc;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
 }
 
-.note-title {
+.note-content h3 {
   font-size: 1.1rem;
-  color: #2d3748;
-  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: #0366d6;
 }
 
-.note-body {
-  color: #4a5568;
+.note-content p {
+  color: #444d56;
   font-size: 0.95rem;
-  white-space: pre-wrap;
 }
 
 .delete-btn {
-  background-color: #e53e3e;
-  padding: 0.35rem 0.75rem;
+  background-color: #d73a49;
+  padding: 0.4rem 0.8rem;
   font-size: 0.85rem;
-  align-self: flex-start;
 }
 
 .delete-btn:hover:not(:disabled) {
-  background-color: #c53030;
+  background-color: #b31d28;
 }
 
-.empty-state {
-  color: #718096;
-  text-align: center;
+.empty-message {
+  color: #586069;
   font-style: italic;
-  padding: 2rem;
-  border: 2px dashed #e2e8f0;
-  border-radius: 6px;
+  padding: 1rem 0;
 }
