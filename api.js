@@ -51,7 +51,13 @@ function createNoteElement(note) {
   titleEl.className = "note-title";
   titleEl.textContent = note.title;
 
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "delete-btn";
+  deleteBtn.textContent = "Delete";
+  deleteBtn.addEventListener("click", () => handleDeleteNote(note.id, deleteBtn));
+
   headerDiv.appendChild(titleEl);
+  headerDiv.appendChild(deleteBtn);
 
   const bodyEl = document.createElement("p");
   bodyEl.className = "note-body";
@@ -80,7 +86,7 @@ async function loadNotes() {
       notesList.appendChild(createNoteElement(note));
     });
 
-    setStatus("Loaded 10 notes from the server.", "success");
+    setStatus(`Loaded ${notes.length} notes from the server.`, "success");
   } catch (error) {
     setStatus(`Failed to load notes: ${error.message}`, "error");
   } finally {
@@ -88,5 +94,89 @@ async function loadNotes() {
   }
 }
 
+async function handleCreateNote(event) {
+  event.preventDefault();
+
+  const title = titleInput.value.trim();
+  const body = bodyInput.value.trim();
+
+  if (!title) {
+    setStatus("Validation error: Title is required.", "error");
+    titleInput.focus();
+    return;
+  }
+
+  if (title.length > 100) {
+    setStatus("Validation error: Title cannot exceed 100 characters.", "error");
+    titleInput.focus();
+    return;
+  }
+
+  submitBtn.disabled = true;
+  setStatus("Creating note...", "loading");
+
+  try {
+    const payload = {
+      title: title,
+      body: body,
+      userId: 1,
+    };
+
+    const { data: newNote, status } = await request(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const emptyStateEl = notesList.querySelector(".empty-state");
+    if (emptyStateEl) {
+      notesList.innerHTML = "";
+    }
+
+    notesList.prepend(createNoteElement(newNote));
+    noteForm.reset();
+    setStatus(`Note created (status ${status}, id ${newNote.id}).`, "success");
+  } catch (error) {
+    setStatus(`Failed to create note: ${error.message}`, "error");
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+async function handleDeleteNote(noteId, buttonElement) {
+  /*
+   * NOTE REGARDING JSONPLACEHOLDER:
+   * JSONPlaceholder is a mock REST API. It simulates HTTP responses (such as 200 OK)
+   * but does not mutate a real persistent database on the backend. Newly created items
+   * (e.g. ID 101) return 200 on DELETE without persisting. We still send the network request
+   * and, on HTTP success, remove the corresponding DOM element from the UI.
+   */
+  buttonElement.disabled = true;
+  setStatus(`Deleting note #${noteId}...`, "loading");
+
+  try {
+    await request(`${API_URL}/${noteId}`, {
+      method: "DELETE",
+    });
+
+    const noteItem = document.getElementById(`note-${noteId}`);
+    if (noteItem) {
+      noteItem.remove();
+    }
+
+    if (notesList.children.length === 0) {
+      renderEmptyState();
+    }
+
+    setStatus(`Note #${noteId} successfully deleted.`, "success");
+  } catch (error) {
+    setStatus(`Failed to delete note #${noteId}: ${error.message}`, "error");
+    buttonElement.disabled = false;
+  }
+}
+
 loadBtn.addEventListener("click", loadNotes);
+noteForm.addEventListener("submit", handleCreateNote);
 renderEmptyState();
